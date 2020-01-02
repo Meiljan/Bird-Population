@@ -1,0 +1,235 @@
+setwd("//ueahome4/stusci2/ecq18upu/data/Documents/Ecology")
+dat <- read.csv("Bird_Dataset_2019.csv")
+dat <- dat[dat$Year !=2001 & dat$Farmland > 75 & dat$Pop_Index > 0 & dat$Species %in%
+c('Starling', 'Skylark', 'Yellow Wagtail', 'Kestrel', 'Yellowhammer', 'Greenfinch',
+'Swallow', 'Lapwing', 'House Martin', 'Long-tailed Tit', 'Linnet', 'Grey Partridge',
+'Turtle Dove', 'Corn Bunting', 'Bullfinch', 'Song Thrush', 'Blackbird', 'Dunnock',
+'Whitethroat', 'Rook', 'Woodpigeon', 'Reed Bunting', 'Stock Dove', 'Goldfinch',
+'Jackdaw', 'Wren', 'Robin', 'Blue Tit', 'Great Tit', 'Chaffinch', 'Buzzard',
+'Sparrowhawk'),]
+years <- 1994:2013
+library(dplyr)
+G_dat <- dat[dat$Year !=2001 & dat$Farmland > 75 & dat$Pop_Index > 0 & dat$Species
+%in% c("Kestrel", "Greenfinch", "Swallow", "House Martin", "Bullfinch", "Song
+Thrush", "Blackbird", "Dunnock", "Rook", "Woodpigeon","Reed Bunting", "Jackdaw",
+"Wren", "Robin", "Blue Tit", "Great Tit","Long-tailed
+Tit","Chaffinch","Buzzard","Sparrowhawk","Yellow Wagtail"),]
+S_dat <- dat[dat$Year !=2001 & dat$Farmland >75 & dat$Pop_Index > 0 & dat$Species
+%in% c("Starling", "Skylark", "Linnet", "Grey Partridge", "Turtle Dove", "Corn
+Bunting", "Stock Dove", "Goldfinch","Yellowhammer","Lapwing","Whitethroat") &
+log(dat[, 8]),]
+#Log Values and create data.frame--------------------------------------------------
+G_frame <- G_dat %>%
+ group_by(Species, Year) %>%
+ summarise(Population = log10(mean(log(Pop_Index))),
+ sd.value = log10(sd(log(Pop_Index))), count = n(),
+ se.value = sd.value/sqrt(count))
+S_frame <- S_dat %>%
+ group_by(Species, Year) %>%
+ summarise(Population = log10(mean(log(Pop_Index))),
+ sd.value = log10(sd(log(Pop_Index))), count = n(),
+ se.value = sd.value/sqrt(count))
+#Creating Long to wide column format-----------------------------------------------
+library(reshape2)
+G_frame1 <- dcast(G_frame, Year ~ Species, value.var = "Population")
+S_frame1 <- dcast(S_frame, Year ~ Species, value.var = "Population")
+
+#Load other dataframes-----------------------------------------------
+#BTO dataset--------------------------------------------------------
+BTO <- read.csv("BTO bird characteristic dataset.csv")
+#DEFRA National Bird data------------------------------------------------
+national_dat <- read.csv("National Population of Birds.csv")
+library(plyr)
+#Pearson Analysis------------------------------------------------------------------
+#Generalists------------------------------------------------
+G_result_cor <- apply(G_frame1,2,function(x){cor.test(G_frame1$Year,x, method =
+'pearson')$estimate})
+G_pearson <- as.data.frame(as.table(G_result_cor))
+G_pearson <- G_pearson[-1, ]
+colnames(G_pearson) <- c("Species", "PearsonCoefficient")
+G_pearson <- ddply(G_pearson, .(Species), summarise,
+PearsonCoef=round(sum(PearsonCoefficient), 3))
+#Generalist Significance -----------------------------------------
+G_result_sig <- apply(G_frame1,2,function(x){cor.test(G_frame1$Year,x, method =
+'pearson')$p.value})
+cor.test(G_frame$Population, G_frame$Year)
+G_sig <- as.data.frame(as.table(G_result_sig))
+G_sig <- G_sig[-1, ]
+colnames(G_sig) <- c("Species", "Significance")
+G_sig <- ddply(G_sig, .(Species), summarise, Significance=round(sum(Significance),
+3))
+#Generalist Pearsons dataframe--------------------------
+G_pearson <- data.frame(cbind(G_pearson,G_sig$Significance))
+colnames(G_pearson) <- c("Species","Coefficient", "Significance")
+#Specialists - Pearson Correlation Coefficient-------------------------------------
+S_result_cor <- apply(S_frame1,2,function(x){cor.test(S_frame1$Year,x, method =
+'pearson')$estimate})
+S_pearson <- as.data.frame(as.table(S_result_cor))
+S_pearson <- S_pearson[-1, ]
+colnames(S_pearson) <- c("Species", "PearsonCoefficient")
+S_pearson <- ddply(S_pearson, .(Species), summarise,
+PearsonCoef=round(sum(PearsonCoefficient), 3))
+#Specialist Significance
+S_signi <- apply(S_frame1,2,function(x){cor.test(S_frame1$Year,x, method =
+'pearson',)$p.value})
+S_sig <- as.data.frame(as.table(S_signi))
+S_sig <- S_sig[-1, ]
+colnames(S_sig) <- c("Species", "Significance")
+S_sig <- ddply(S_sig, .(Species), summarise, Significance=round(sum(Significance),
+3))
+#Specialist Pearsons dataframe
+S_pearson <- data.frame(cbind(S_pearson,S_sig$Significance))
+colnames(S_pearson) <- c("Species", "Coefficient", "Significance")
+#Tidy------------------------------------------------------------------------------
+------
+rm(list = ls.str(mod = 'numeric'))
+#NATIONAL DATA LINEAR MODELLING ---------------------------------------------------
+Mod1 <- lm(Species.Pop ~ Year, national_dat)
+Mod2 <- lm(Farmland ~ Year, national_dat)
+Mod3 <- lm(Farmland.Generalist ~ Year, national_dat)
+Mod4 <- lm(Farmland.birds.Specialist ~ Year, national_dat)
+Mod <- sapply(national_dat, function(x){
+ lm(x~Year, data = national_dat)$coefficients[2]})
+national_pop <- data.frame(conditions = colnames(national_dat), Coefficient = Mod)
+national_pop <- national_pop[-1,]
+rownames(national_pop) <- NULL
+colnames(national_pop) <- c("Species", "Coefficient")
+#Tidy---------------------------
+rm(Mod1, Mod2, Mod3, Mod4)
+rm(list = ls.str(mod = 'numeric'))
+#Grid reference plots for Raster---------------------------------------------------
+----
+grid_ref <- aggregate(Farmland ~ Species + Year + GRIDREF + Lat + Long,
+dat[dat$Species %in% c('Starling', 'Skylark', 'Yellow Wagtail', 'Kestrel',
+'Yellowhammer', 'Greenfinch', 'Swallow', 'Lapwing', 'House Martin', 'Long-tailed
+Tit', 'Linnet', 'Grey Partridge', 'Turtle Dove', 'Corn Bunting', 'Bullfinch', 'Song
+Thrush', 'Blackbird', 'Dunnock', 'Whitethroat', 'Rook', 'Woodpigeon', 'Reed Bunting',
+'Stock Dove', 'Goldfinch', 'Jackdaw', 'Wren', 'Robin', 'Blue Tit', 'Great Tit',
+'Chaffinch', 'Buzzard', 'Sparrowhawk'),], mean)
+grid_ref <- grid_ref [grid_ref$Farmland !=0,]
+#East of England Raster---------------------------------------------------
+library(sp)
+library(raster)
+uk <- raster("Uk_map.grd")
+east_ang <- crop(uk,c(-0.75,1.75,51.5,53))
+plot(east_ang,ylab="Latitude", xlab="Longitude", main="Map of BBS farmland sites")
+#N=609
+points(grid_ref$Long, grid_ref_one2$Lat,pch=16,col='forestgreen')
+#Tidy Data-------------------------------------------------------------------------
+-----
+rm(grid_ref_one2,east_ang,uk)
+rm(list = ls.str(mod = 'numeric'))
+#Graph production---------------------------------------------------
+#(National) DEFRA Graphs--------------------------------------
+plot(national_dat$Year,national_dat$`Farmland.Generalist`, pch=18,
+xlab='Years',ylab='Change in Populations', main='National Farmland Generalist Bird
+Populations (1994-2013)', col='navy')
+DEFRA1 <- lm(Farmland.Generalist ~ Year, national_dat)
+abline(DEFRA1)
+legend("topright", bty="n", legend=paste("R2",
+format(summary(DEFRA1)$adj.r.squared,digits=4)))
+cor.test(national_dat$Year, national_dat$`Farmland.Generalist`,method='pearson')
+plot(national_dat$Year,national_dat$`Farmland.birds.Specialist`, pch=18,
+xlab='Years',ylab='Change in Bird Populations', main='National Farmland Specialist
+Bird Populations (1994-2013)', col='forestgreen')
+DEFRA2 <- lm(Farmland.birds.Specialist~ Year, national_dat)
+abline(DEFRA2)
+legend("topright", bty="n", legend=paste("R2",
+format(summary(DEFRA2)$adj.r.squared,digits=4)))
+cor.test(national_dat$Year,
+national_dat$`Farmland.birds.Specialist`,method='pearson')
+rm(DEFRA1,DEFRA2)
+#BBS species models----------------------------------------------------------------
+---
+#Plot Generalist-------------------------------------------------------------------
+---
+library(ggplot2)
+library(ggpmisc)
+my.formula <- y ~ x
+ggplot(G_frame, aes(Year,Population, group = Species)) +
+ geom_line(colour="darkblue") +
+ labs(y="Log transformed populations", x = "Years (1994-2013)") +
+ geom_smooth(method="lm", se=F, formula=my.formula, level = 0.95) +
+ stat_poly_eq(aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")), formula
+= my.formula, parse = TRUE, label.x = c(rep('right', 2)),label.y = c(-6) *
+G_frame$Population, size = 4) +
+ facet_wrap(~Species, scales = "free_y") + geom_errorbar(aes(ymin = Population -
+se.value, ymax = Population + se.value), size = 0.5, width=0.5) +
+ theme_bw() + theme(panel.grid.major = element_blank(),panel.grid.minor =
+element_blank(),strip.background = element_blank(),panel.border =
+element_rect(colour = "black"))
+#Plot Specialist-------------------------------------------------------------------
+-----
+ggplot(S_frame, aes(Year, Population, group = Species)) +
+ geom_line(colour="green4") +
+ labs(y="Log transformed populations", x = "Years (1994-2013)") +
+ geom_smooth(method="lm", se=F, formula=my.formula) +
+ stat_poly_eq(aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")), formula
+= my.formula, parse = TRUE,label.x = c(rep('right', 2)),label.y = c(-6) *
+S_frame$Population, size = 4) +
+ facet_wrap(~Species, scales = "free_y") + geom_errorbar(aes(ymin = Population -
+se.value, ymax = Population + se.value), size = 0.5, width=0.5) +
+ theme_bw() + theme(panel.grid.major = element_blank(),panel.grid.minor =
+element_blank(),strip.background = element_blank(),panel.border =
+element_rect(colour = "black"))
+#Tidy---------------------------------------------------
+rm(ggGeneralist, ggSpecialist, my.formula)
+rm(list = ls.str(mod = 'numeric'))
+#BTO Data -----------------------------------------------------------------
+#Bar plots -----------------------------------------------
+#East of England species change
+BTO$colors <- "forestgreen"
+BTO$colors[BTO$G.vs.S=="S"] <- "navy"
+COLOURS<-as.factor(BTO$colors)
+barplot(BTO$BBS.Change~BTO$Abb, xlab='Species (abbreviated)', ylab= 'Change in
+farmland bird population between 1994 and 2013',main='Species population change in
+the East of England (1994-2013)', ylim=c(-1,1), col=BTO$colors)
+box(which = "plot", lty = "solid")
+abline(h=0,col='red')
+legend("top",col=levels(COLOURS), title = "Generalist/Specialist",
+c("Generalist","Specialist"), pch=19)
+#National species change----------------------------------------------------
+barplot(BTO$National.Change~BTO$Abb, xlab='Species (abbreviated)',ylim=c(-8,5),ylab=
+'Change in farmland bird population between 1994 and 2013',main='National species
+population change (1994-2013)', col=BTO$colors)
+box(which = "plot", lty = "solid")
+abline(h=0,col='red')
+legend("top",col=levels(COLOURS), title = "Generalist/Specialist",
+c("Generalist","Specialist"), pch=19)
+#Boxplots--------------------------------------------------------------------------
+---
+#G.vs.S-----------------------------------------------------------------------
+boxplot(BTO$`National.Change`~BTO$`G.vs.S`,xlab='Generalist/Specialist',
+ylab='Population Change', main='Generalists vs Specialists: National Population
+Change ',col=(c('darkgoldenrod1','darkslategray')))
+abline(h=0,col='red')
+boxplot(BTO$`BBS.Change`~BTO$`G.vs.S`,xlab='Generalist/Specialist',
+ylab='Population Change', main='Generalists vs Specialists: Change
+(BBS)',col=(c('darkgoldenrod1','darkslategray'))) 
+abline(h=0,col='red')
+#------------------------------------------------------------
+#Correlating characteristics and bird population change in East of England
+G.vs.S <- lm(`BBS.Change` ~ `G.vs.S`, BTO)
+R.vs.M <- lm(`BBS.Change` ~ `R.vs.M`, BTO)
+Diet <- lm(`BBS.Change` ~ `Diet`, BTO)
+Weight <- lm(`BBS.Change` ~ `Average.weight`, BTO)
+F.Clutch <- lm(`BBS.Change` ~ `First.Clutch`, BTO)
+Brood <- lm(`BBS.Change` ~ `Median.broods`, BTO)
+M.Clutch <- lm(`BBS.Change` ~ `Median.clutch`, BTO)
+Incubation <- lm(`BBS.Change` ~ `Median.incubation`, BTO)
+Fledge <- lm(`BBS.Change` ~ `Median.fledging`, BTO)
+J.surv <- lm(`BBS.Change` ~ `Juvenile.survival`, BTO)
+A.surv<- lm(`BBS.Change` ~ `Adult.survival`, BTO)
+Lifespan <- lm(`BBS.Change` ~ `Lifespan`, BTO)
+#install required package-----------------------------------------------------
+install.packages("memisc")
+library(memisc)
+#Summary table for correlation between bird characteristics and population change--
+----
+mtable(G.vs.S,R.vs.M,Diet,Weight,F.Clutch,Brood,M.Clutch,Incubation,Fledge,J.surv,A
+.surv,Lifespan, summary.stats = c("R-squared", "F", "p", "N"))
+#Environment Tidy---------------------------------------------
+rm(G/S,R/M,Diet,Weight,F.Clutch,Brood,M.Clutch,Incubation,Fledge,J.surv,A.surv,Life
+span)
+rm(list = ls.str(mod = 'numeric'))
+#End------------------------------------------------------------------------------
